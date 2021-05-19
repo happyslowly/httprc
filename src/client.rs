@@ -5,6 +5,7 @@ use reqwest::blocking::{Client, RequestBuilder, Response};
 use reqwest::header::HeaderMap;
 use serde_json;
 use serde_json::Value;
+use std::error::Error;
 
 pub fn process(opt: &Opt) {
     let client = Client::new();
@@ -33,9 +34,23 @@ fn get(client: &Client, opt: &Opt) {
                 dump_body(&text, opt.verbose > 0);
             }
         }
-        Err(e) => {
-            println!("{:?}", e);
+        Err(e) => handle_error(&e, opt.verbose > 0),
+    }
+}
+
+fn handle_error(e: &reqwest::Error, verbose: bool) {
+    if verbose {
+        eprintln!("{}", e.to_string());
+    } else {
+        let mut err = e.source();
+        while let Some(e) = err {
+            if e.source().is_none() {
+                eprintln!("{}", e);
+                return;
+            }
+            err = e.source();
         }
+        eprintln!("{}", e.to_string());
     }
 }
 
