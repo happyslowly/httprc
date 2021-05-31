@@ -2,7 +2,7 @@ use super::opt::Method;
 use super::opt::Opt;
 use reqwest;
 use reqwest::blocking::{Client, RequestBuilder, Response};
-use reqwest::header::HeaderMap;
+use reqwest::header::{HeaderMap, HeaderName};
 use serde_json;
 use serde_json::Value;
 use std::error::Error;
@@ -23,6 +23,10 @@ fn get(client: &Client, opt: &Opt) {
 
     if let Some(ref basic) = opt.basic {
         req = basic_auth(req, basic);
+    }
+
+    if let Some(ref headers) = opt.headers {
+        req = set_headers(req, headers)
     }
 
     match req.send() {
@@ -85,4 +89,17 @@ fn basic_auth(req: RequestBuilder, credential: &str) -> RequestBuilder {
         return req;
     }
     req
+}
+
+fn set_headers(req: RequestBuilder, headers: &Vec<String>) -> RequestBuilder {
+    let mut hm = HeaderMap::new();
+    for header in headers.iter() {
+        let v = header.split(":").collect::<Vec<_>>();
+        if v.len() > 1 {
+            if let Ok(name) = HeaderName::from_bytes(v[0].as_bytes()) {
+                hm.insert(name, v[1].parse().unwrap());
+            }
+        }
+    }
+    req.headers(hm)
 }
