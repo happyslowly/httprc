@@ -8,6 +8,7 @@ use serde_json::Value;
 use std::error::Error;
 
 pub fn process(opt: &Opt) {
+    println!("{:?}", opt);
     let client = Client::new();
     match opt.method {
         Method::Get => get(&client, opt),
@@ -31,15 +32,15 @@ fn get(client: &Client, opt: &Opt) {
                 dump_headers(r.headers());
             }
             if let Ok(text) = r.text() {
-                dump_body(&text, opt.verbose > 0);
+                dump_body(&text, opt.verbose);
             }
         }
-        Err(e) => handle_error(&e, opt.verbose > 0),
+        Err(e) => handle_error(&e, opt.verbose),
     }
 }
 
-fn handle_error(e: &reqwest::Error, verbose: bool) {
-    if verbose {
+fn handle_error(e: &reqwest::Error, verbose: u8) {
+    if verbose > 0 {
         eprintln!("{}", e.to_string());
     } else {
         let mut err = e.source();
@@ -54,8 +55,8 @@ fn handle_error(e: &reqwest::Error, verbose: bool) {
     }
 }
 
-fn dump_body(text: &str, verbose: bool) {
-    if verbose {
+fn dump_body(text: &str, verbose: u8) {
+    if verbose > 0 {
         println!();
     }
     if let Ok(v) = serde_json::from_str::<Value>(text) {

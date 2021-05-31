@@ -33,4 +33,7 @@ pub struct Opt {
 
     #[structopt(short, long)]
     pub basic: Option<String>,
+
+    #[structopt(short = "-H", long, multiple = true)]
+    pub header: Option<Vec<String>>,
 }
