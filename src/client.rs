@@ -1,49 +1,80 @@
 use super::opt::Method;
 use super::opt::Opt;
 use reqwest;
-use reqwest::blocking::{Client, RequestBuilder, Response};
+use reqwest::blocking::{Client, Request, RequestBuilder, Response};
 use reqwest::header::{HeaderMap, HeaderName};
 use serde_json;
 use serde_json::Value;
 use std::error::Error;
+use std::fs::File;
 
 pub fn process(opt: &Opt) {
-    println!("{:?}", opt);
     let client = Client::new();
     match opt.method {
-        Method::Get => get(&client, opt),
+        Method::Get => get(client.get(&opt.url), &client, opt),
+        Method::Post => post_or_put(client.post(&opt.url), &client, opt),
+        Method::Put => post_or_put(client.put(&opt.url), &client, opt),
         _ => {
             unimplemented!()
         }
     };
 }
 
-fn get(client: &Client, opt: &Opt) {
-    let mut req = client.get(&opt.url);
+fn get(builder: RequestBuilder, client: &Client, opt: &Opt) {
+    let builder = enrich_request(builder, opt);
+    send(builder, client, opt);
+}
 
+fn post_or_put(builder: RequestBuilder, client: &Client, opt: &Opt) {
+    let mut builder = enrich_request(builder, opt);
+    if let Some(ref file) = opt.file {
+        match File::open(file) {
+            Ok(f) => builder = builder.body(f),
+            Err(e) => {
+                eprintln!("{}", e.to_string());
+                std::process::exit(1);
+            }
+        }
+    }
+    send(builder, client, opt);
+}
+
+fn enrich_request(mut builder: RequestBuilder, opt: &Opt) -> RequestBuilder {
     if let Some(ref basic) = opt.basic {
-        req = basic_auth(req, basic);
+        builder = basic_auth(builder, basic);
+    }
+
+    if let Method::Post | Method::Put = opt.method {
+        builder = set_headers(builder, &vec!["content-type:application/json".to_string()])
     }
 
     if let Some(ref headers) = opt.headers {
-        req = set_headers(req, headers)
+        builder = set_headers(builder, headers)
     }
+    builder
+}
 
-    match req.send() {
-        Ok(r) => {
-            if opt.verbose > 0 {
-                dump_version_and_status(&r);
-                dump_headers(r.headers());
-            }
-            if let Ok(text) = r.text() {
-                dump_body(&text, opt.verbose);
-            }
+fn send(builder: RequestBuilder, client: &Client, opt: &Opt) {
+    if let Ok(req) = builder.build() {
+        if opt.verbose > 1 {
+            dump_req(&req);
         }
-        Err(e) => handle_error(&e, opt.verbose),
+        match client.execute(req) {
+            Ok(r) => {
+                if opt.verbose > 0 {
+                    dump_version_and_status(&r);
+                    dump_headers(r.headers(), false);
+                }
+                if let Ok(text) = r.text() {
+                    dump_resp_body(&text, opt.verbose);
+                }
+            }
+            Err(e) => handle_http_error(&e, opt.verbose),
+        }
     }
 }
 
-fn handle_error(e: &reqwest::Error, verbose: u8) {
+fn handle_http_error(e: &reqwest::Error, verbose: u8) {
     if verbose > 0 {
         eprintln!("{}", e.to_string());
     } else {
@@ -59,7 +90,13 @@ fn handle_error(e: &reqwest::Error, verbose: u8) {
     }
 }
 
-fn dump_body(text: &str, verbose: u8) {
+fn dump_req(req: &Request) {
+    println!("> {} {}", req.method(), req.url());
+    dump_headers(req.headers(), true);
+    println!();
+}
+
+fn dump_resp_body(text: &str, verbose: u8) {
     if verbose > 0 {
         println!();
     }
@@ -72,26 +109,27 @@ fn dump_body(text: &str, verbose: u8) {
     println!("{}", text);
 }
 
-fn dump_headers(headers: &HeaderMap) {
+fn dump_headers(headers: &HeaderMap, is_req: bool) {
+    let prefix = if is_req { ">" } else { "<" };
     for (k, v) in headers {
-        println!("{}: {:?}", k, v);
+        println!("{} {}: {}", prefix, k, v.to_str().unwrap_or(""));
     }
 }
 
 fn dump_version_and_status(resp: &Response) {
-    println!("{:?} {:?}", resp.version(), resp.status());
+    println!("< {:?} {:?}", resp.version(), resp.status());
 }
 
-fn basic_auth(req: RequestBuilder, credential: &str) -> RequestBuilder {
+fn basic_auth(builder: RequestBuilder, credential: &str) -> RequestBuilder {
     let v: Vec<&str> = credential.split(":").collect();
     if v.len() > 1 {
-        let req = req.basic_auth(v[0], Some(v[1].to_owned()));
-        return req;
+        let builder = builder.basic_auth(v[0], Some(v[1].to_owned()));
+        return builder;
     }
-    req
+    builder
 }
 
-fn set_headers(req: RequestBuilder, headers: &Vec<String>) -> RequestBuilder {
+fn set_headers(builder: RequestBuilder, headers: &Vec<String>) -> RequestBuilder {
     let mut hm = HeaderMap::new();
     for header in headers.iter() {
         let v = header.split(":").collect::<Vec<_>>();
@@ -101,5 +139,5 @@ fn set_headers(req: RequestBuilder, headers: &Vec<String>) -> RequestBuilder {
             }
         }
     }
-    req.headers(hm)
+    builder.headers(hm)
 }
