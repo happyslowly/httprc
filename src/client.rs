@@ -9,7 +9,7 @@ use std::error::Error;
 use std::fs::File;
 
 pub fn process(opt: &Opt) {
-    let client = Client::new();
+    let client = make_client(opt);
     match opt.method {
         Method::Get => get(client.get(&opt.url), &client, opt),
         Method::Post => post_or_put(client.post(&opt.url), &client, opt),
@@ -37,6 +37,20 @@ fn post_or_put(builder: RequestBuilder, client: &Client, opt: &Opt) {
         }
     }
     send(builder, client, opt);
+}
+
+fn make_client(opt: &Opt) -> Client {
+    let mut builder = Client::builder();
+    if opt.insecure {
+        builder = builder.danger_accept_invalid_certs(true);
+    }
+    match builder.build() {
+        Ok(client) => client,
+        Err(e) => {
+            handle_http_error(&e, opt.verbose);
+            std::process::exit(1);
+        }
+    }
 }
 
 fn enrich_request(mut builder: RequestBuilder, opt: &Opt) -> RequestBuilder {

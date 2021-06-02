@@ -25,7 +25,7 @@ pub struct Opt {
         short,
         long,
         parse(from_occurrences),
-        help = "display more information"
+        help = "Display more information"
     )]
     pub verbose: u8,
 
@@ -50,10 +50,13 @@ pub struct Opt {
         short = "-H",
         long,
         multiple = true,
-        help = "customized header, in <key:value>"
+        help = "Customized header, in <key:value>"
     )]
     pub headers: Option<Vec<String>>,
 
     #[structopt(short, long, help = "POST data file")]
     pub file: Option<String>,
+
+    #[structopt(short = "k", long, help = "Allow insecure connections when using SSL")]
+    pub insecure: bool,
 }
