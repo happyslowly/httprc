@@ -1,15 +1,17 @@
 use super::opt::Method;
 use super::opt::Opt;
+use anyhow::{Context, Result};
 use reqwest;
 use reqwest::blocking::{Client, Request, RequestBuilder, Response};
 use reqwest::header::{HeaderMap, HeaderName};
 use serde_json;
 use serde_json::Value;
-use std::error::Error;
 use std::fs::File;
+use std::io;
+use std::io::Read;
 
-pub fn process(opt: &Opt) {
-    let client = make_client(opt);
+pub fn process(opt: &Opt) -> Result<()> {
+    let client = make_client(opt).with_context(|| format!("Cannot create HTTP client"))?;
     match opt.method {
         Method::Get => get(client.get(&opt.url), &client, opt),
         Method::Post => post_or_put(client.post(&opt.url), &client, opt),
@@ -17,40 +19,37 @@ pub fn process(opt: &Opt) {
         _ => {
             unimplemented!()
         }
-    };
+    }
 }
 
-fn get(builder: RequestBuilder, client: &Client, opt: &Opt) {
+fn get(builder: RequestBuilder, client: &Client, opt: &Opt) -> Result<()> {
     let builder = enrich_request(builder, opt);
-    send(builder, client, opt);
+    send(builder, client, opt)
 }
 
-fn post_or_put(builder: RequestBuilder, client: &Client, opt: &Opt) {
+fn post_or_put(builder: RequestBuilder, client: &Client, opt: &Opt) -> Result<()> {
     let mut builder = enrich_request(builder, opt);
     if let Some(ref file) = opt.file {
-        match File::open(file) {
-            Ok(f) => builder = builder.body(f),
-            Err(e) => {
-                eprintln!("{}", e.to_string());
-                std::process::exit(1);
-            }
+        let file = File::open(file).with_context(|| format!("Cannot open file `{}`", file))?;
+        builder = builder.body(file);
+    } else {
+        if atty::isnt(atty::Stream::Stdin) {
+            let mut buffer = String::new();
+            io::stdin()
+                .read_to_string(&mut buffer)
+                .with_context(|| format!("Cannot read from stdin"))?;
+            builder = builder.body(buffer);
         }
     }
-    send(builder, client, opt);
+    send(builder, client, opt)
 }
 
-fn make_client(opt: &Opt) -> Client {
+fn make_client(opt: &Opt) -> Result<Client, reqwest::Error> {
     let mut builder = Client::builder();
     if opt.insecure {
         builder = builder.danger_accept_invalid_certs(true);
     }
-    match builder.build() {
-        Ok(client) => client,
-        Err(e) => {
-            handle_http_error(&e, opt.verbose);
-            std::process::exit(1);
-        }
-    }
+    builder.build()
 }
 
 fn enrich_request(mut builder: RequestBuilder, opt: &Opt) -> RequestBuilder {
@@ -68,40 +67,29 @@ fn enrich_request(mut builder: RequestBuilder, opt: &Opt) -> RequestBuilder {
     builder
 }
 
-fn send(builder: RequestBuilder, client: &Client, opt: &Opt) {
-    if let Ok(req) = builder.build() {
-        if opt.verbose > 1 {
-            dump_req(&req);
-        }
-        match client.execute(req) {
-            Ok(r) => {
-                if opt.verbose > 0 {
-                    dump_version_and_status(&r);
-                    dump_headers(r.headers(), false);
-                }
-                if let Ok(text) = r.text() {
-                    dump_resp_body(&text, opt.verbose);
-                }
-            }
-            Err(e) => handle_http_error(&e, opt.verbose),
-        }
-    }
-}
+fn send(builder: RequestBuilder, client: &Client, opt: &Opt) -> Result<()> {
+    let req = builder
+        .build()
+        .with_context(|| format!("Failed to create request"))?;
 
-fn handle_http_error(e: &reqwest::Error, verbose: u8) {
-    if verbose > 0 {
-        eprintln!("{}", e.to_string());
-    } else {
-        let mut err = e.source();
-        while let Some(e) = err {
-            if e.source().is_none() {
-                eprintln!("{}", e);
-                return;
-            }
-            err = e.source();
-        }
-        eprintln!("{}", e.to_string());
+    if opt.verbose > 1 {
+        dump_req(&req);
     }
+
+    let resp = client
+        .execute(req)
+        .with_context(|| format!("Failed to send request"))?;
+
+    if opt.verbose > 0 {
+        dump_version_and_status(&resp);
+        dump_headers(resp.headers(), false);
+    }
+
+    let text = resp
+        .text()
+        .with_context(|| format!("Failed to extract response body"))?;
+    dump_resp_body(&text, opt.verbose);
+    Ok(())
 }
 
 fn dump_req(req: &Request) {
