@@ -8,7 +8,21 @@ use serde_json;
 use serde_json::Value;
 use std::fs::File;
 use std::io;
-use std::io::Read;
+use std::io::{Read, Write};
+
+macro_rules! println {
+    ($($arg:tt)*) => {
+        let stdout = io::stdout();
+        let handle = stdout.lock();
+        let mut handle = io::BufWriter::new(handle);
+        if let Err(e) = writeln!(&mut handle, $($arg)*) {
+            if e.kind() != io::ErrorKind::BrokenPipe {
+                eprintln!("{:?}", e);
+            }
+            return;
+        }
+    };
+}
 
 pub fn process(opt: &Opt) -> Result<()> {
     let client = make_client(opt).with_context(|| format!("Cannot create HTTP client"))?;
