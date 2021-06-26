@@ -48,15 +48,34 @@ pub struct Opt {
 
     #[structopt(
         short = "-H",
-        long,
+        long = "header",
         multiple = true,
         help = "Customized header, in <key:value>"
     )]
     pub headers: Option<Vec<String>>,
 
-    #[structopt(short, long, help = "POST data file")]
+    #[structopt(short, long, help = "Post data file")]
     pub file: Option<String>,
 
     #[structopt(short = "k", long, help = "Allow insecure connections when using SSL")]
     pub insecure: bool,
+
+    #[structopt(short = "j", long, help = "Cookie jar to send/save the cookies")]
+    pub cookie_jar: Option<String>,
+
+    #[structopt(
+        short = "d",
+        long,
+        multiple = true,
+        help = "Post form data, in <key=value>"
+    )]
+    pub form: Option<Vec<String>>,
+
+    #[structopt(
+        short = "c",
+        long = "cookie",
+        multiple = true,
+        help = "Send individual cookie"
+    )]
+    pub cookies: Option<Vec<String>>,
 }
