@@ -88,6 +88,10 @@ fn enrich_request(mut builder: RequestBuilder, opt: &Opt) -> Result<RequestBuild
         builder = basic_auth(builder, basic);
     }
 
+    if let Some(ref token) = opt.bearer {
+        builder = builder.bearer_auth(token);
+    }
+
     if let Method::Post | Method::Put = opt.method {
         builder = set_headers(builder, &vec!["content-type:application/json".to_string()])
     }

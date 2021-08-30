@@ -40,11 +40,14 @@ pub struct Opt {
     pub method: Method,
 
     #[structopt(
-        short,
-        long,
+        short = "u",
+        long = "user",
         help = "Server username and password, in <username:password>"
     )]
     pub basic: Option<String>,
+
+    #[structopt(short, long, help = "Bearer token")]
+    pub bearer: Option<String>,
 
     #[structopt(
         short = "-H",
