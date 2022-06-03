@@ -53,6 +53,7 @@ pub struct Opt {
         short = "-H",
         long = "header",
         multiple = true,
+        number_of_values = 1,
         help = "Customized header, in <key:value>"
     )]
     pub headers: Option<Vec<String>>,
@@ -70,6 +71,7 @@ pub struct Opt {
         short = "d",
         long,
         multiple = true,
+        number_of_values = 1,
         help = "Post form data, in <key=value>"
     )]
     pub form: Option<Vec<String>>,
@@ -78,6 +80,7 @@ pub struct Opt {
         short = "c",
         long = "cookie",
         multiple = true,
+        number_of_values = 1,
         help = "Send individual cookie"
     )]
     pub cookies: Option<Vec<String>>,
